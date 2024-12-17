@@ -30,3 +30,17 @@
     (ok "Bid placed")
   )
 )
+
+
+(define-public (end-auction)
+  (begin
+    ;; Ensure the auction has ended (duration passed)
+    (asserts! (<= (var-get auction-end) u0) (err "Auction still ongoing"))
+    
+    ;; Ensure the sender is the auction owner
+    (asserts! (is-eq tx-sender (var-get auction-owner)) (err "Only auction owner can end the auction"))
+    
+    ;; Return the highest bidder and the highest bid
+    (ok (var-get highest-bidder))
+  )
+)
