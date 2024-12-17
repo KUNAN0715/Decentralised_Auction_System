@@ -14,3 +14,19 @@
     (ok "Auction started")
   )
 )
+
+
+(define-public (place-bid (amount uint))
+  (begin
+    ;; Ensure the auction is still ongoing
+    (asserts! (> (var-get auction-end) u0) (err "Auction has ended"))
+    
+    ;; Ensure the bid is higher than the current highest bid
+    (asserts! (> amount (var-get highest-bid)) (err "Bid too low"))
+    
+    ;; Place the bid and update the highest bidder
+    (var-set highest-bid amount)
+    (var-set highest-bidder tx-sender)
+    (ok "Bid placed")
+  )
+)
