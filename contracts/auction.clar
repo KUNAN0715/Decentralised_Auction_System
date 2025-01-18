@@ -44,3 +44,19 @@
     (ok (var-get highest-bidder))
   )
 )
+
+
+;; Add at the top with other data vars
+(define-data-var minimum-start-bid uint u100)
+
+;; Modify start-auction to include starting bid
+(define-public (start-auction-advanced (duration uint) (starting-bid uint))
+  (begin
+    (asserts! (is-eq (var-get auction-owner) 'ST1PQHQKV0RJXZFY1DGX8MNSNYVE3VGZJSRTPGZGM) (err "Auction already started"))
+    (asserts! (>= starting-bid (var-get minimum-start-bid)) (err "Starting bid too low"))
+    (var-set highest-bid starting-bid)
+    (var-set auction-end duration)
+    (var-set auction-owner tx-sender)
+    (ok "Auction started")
+  )
+)
