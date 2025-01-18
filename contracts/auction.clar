@@ -139,3 +139,17 @@
     (map-set auction-items item-id {name: name, quantity: quantity, sold: u0})
     (ok "Item added")
   ))
+
+
+
+(define-map whitelisted-bidders principal bool)
+
+(define-public (add-to-whitelist (bidder principal))
+  (begin
+    (asserts! (is-eq tx-sender (var-get auction-owner)) (err "Not auction owner"))
+    (map-set whitelisted-bidders bidder true)
+    (ok "Bidder whitelisted")
+  ))
+
+(define-public (check-whitelist (bidder principal))
+  (ok (default-to false (map-get? whitelisted-bidders bidder))))
