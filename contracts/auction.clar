@@ -95,3 +95,22 @@
     (var-set bid-count (+ (var-get bid-count) u1))
     (ok "Bid recorded")
   ))
+
+
+(define-data-var buy-now-price uint u0)
+
+(define-public (set-buy-now (price uint))
+  (begin
+    (asserts! (is-eq tx-sender (var-get auction-owner)) (err "Not auction owner"))
+    (var-set buy-now-price price)
+    (ok "Buy now price set")
+  ))
+
+(define-public (buy-now)
+  (begin
+    (asserts! (> (var-get buy-now-price) u0) (err "Buy now not available"))
+    (var-set highest-bidder tx-sender)
+    (var-set highest-bid (var-get buy-now-price))
+    (var-set auction-end u0)
+    (ok "Item purchased")
+  ))
