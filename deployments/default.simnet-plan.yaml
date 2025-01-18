@@ -52,6 +52,6 @@ plan:
         - emulated-contract-publish:
             contract-name: auction
             emulated-sender: ST1PQHQKV0RJXZFY1DGX8MNSNYVE3VGZJSRTPGZGM
-            path: contracts/auction.clar
+            path: "contracts\\auction.clar"
             clarity-version: 2
       epoch: "2.5"
