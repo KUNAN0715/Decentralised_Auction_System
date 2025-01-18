@@ -114,3 +114,13 @@
     (var-set auction-end u0)
     (ok "Item purchased")
   ))
+
+
+(define-data-var extension-minutes uint u5)
+
+(define-public (extend-auction)
+  (begin
+    (asserts! (< (- (var-get auction-end) block-height) u10) (err "Not close to end time"))
+    (var-set auction-end (+ (var-get auction-end) (var-get extension-minutes)))
+    (ok "Auction extended")
+  ))
