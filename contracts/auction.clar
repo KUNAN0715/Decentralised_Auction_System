@@ -73,3 +73,14 @@
     (var-set highest-bidder 'ST1PQHQKV0RJXZFY1DGX8MNSNYVE3VGZJSRTPGZGM)
     (ok "Bid withdrawn successfully")
   ))
+
+
+
+(define-data-var reserve-price uint u0)
+
+(define-public (set-reserve-price (price uint))
+  (begin
+    (asserts! (is-eq tx-sender (var-get auction-owner)) (err "Not auction owner"))
+    (var-set reserve-price price)
+    (ok "Reserve price set")
+  ))
