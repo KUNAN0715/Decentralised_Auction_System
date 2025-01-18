@@ -60,3 +60,16 @@
     (ok "Auction started")
   )
 )
+
+
+;; Add new data var
+(define-data-var can-withdraw bool true)
+
+(define-public (withdraw-bid)
+  (begin
+    (asserts! (var-get can-withdraw) (err "Withdrawals not allowed"))
+    (asserts! (is-eq tx-sender (var-get highest-bidder)) (err "Not highest bidder"))
+    (var-set highest-bid u0)
+    (var-set highest-bidder 'ST1PQHQKV0RJXZFY1DGX8MNSNYVE3VGZJSRTPGZGM)
+    (ok "Bid withdrawn successfully")
+  ))
