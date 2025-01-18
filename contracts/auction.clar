@@ -124,3 +124,18 @@
     (var-set auction-end (+ (var-get auction-end) (var-get extension-minutes)))
     (ok "Auction extended")
   ))
+
+
+
+(define-map auction-items uint {
+    name: (string-utf8 50),
+    quantity: uint,
+    sold: uint
+})
+
+(define-public (add-auction-item (item-id uint) (name (string-utf8 50)) (quantity uint))
+  (begin
+    (asserts! (is-eq tx-sender (var-get auction-owner)) (err "Not auction owner"))
+    (map-set auction-items item-id {name: name, quantity: quantity, sold: u0})
+    (ok "Item added")
+  ))
