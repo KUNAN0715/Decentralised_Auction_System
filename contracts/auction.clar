@@ -84,3 +84,14 @@
     (var-set reserve-price price)
     (ok "Reserve price set")
   ))
+
+
+(define-map bid-history uint {bidder: principal, amount: uint})
+(define-data-var bid-count uint u0)
+
+(define-public (record-bid (amount uint))
+  (begin
+    (map-set bid-history (var-get bid-count) {bidder: tx-sender, amount: amount})
+    (var-set bid-count (+ (var-get bid-count) u1))
+    (ok "Bid recorded")
+  ))
