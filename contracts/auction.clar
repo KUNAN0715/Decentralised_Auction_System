@@ -153,3 +153,135 @@
 
 (define-public (check-whitelist (bidder principal))
   (ok (default-to false (map-get? whitelisted-bidders bidder))))
+
+
+
+;; Add at the top with other data vars
+(define-map categories uint (string-utf8 50))
+(define-data-var category-count uint u0)
+
+(define-public (create-category (name (string-utf8 50)))
+  (begin
+    (asserts! (is-eq tx-sender (var-get auction-owner)) (err "Not authorized"))
+    (map-set categories (var-get category-count) name)
+    (var-set category-count (+ (var-get category-count) u1))
+    (ok "Category created")
+  ))
+
+
+(define-map bidder-ratings principal {
+    total-ratings: uint,
+    rating-sum: uint
+})
+
+(define-public (rate-bidder (bidder principal) (rating uint))
+  (begin 
+    (asserts! (<= rating u5) (err "Rating must be 1-5"))
+    (let ((current-rating (default-to {total-ratings: u0, rating-sum: u0} 
+                          (map-get? bidder-ratings bidder))))
+      (map-set bidder-ratings bidder 
+        {total-ratings: (+ (get total-ratings current-rating) u1),
+         rating-sum: (+ (get rating-sum current-rating) rating)})
+      (ok "Rating submitted"))
+  ))
+
+
+
+(define-map auction-lots uint {
+    item-count: uint,
+    min-items: uint,
+    max-items: uint
+})
+
+(define-public (create-lot (lot-id uint) (count uint) (min uint) (max uint))
+  (begin
+    (asserts! (is-eq tx-sender (var-get auction-owner)) (err "Not authorized"))
+    (map-set auction-lots lot-id {
+        item-count: count,
+        min-items: min,
+        max-items: max
+    })
+    (ok "Lot created")
+  ))
+
+
+
+(define-map time-discounts uint {
+    hours-left: uint,
+    discount-percent: uint
+})
+
+(define-public (set-time-discount (hours uint) (discount uint))
+  (begin
+    (asserts! (is-eq tx-sender (var-get auction-owner)) (err "Not authorized"))
+    (asserts! (<= discount u50) (err "Max discount is 50%"))
+    (map-set time-discounts hours {
+        hours-left: hours,
+        discount-percent: discount
+    })
+    (ok "Discount set")
+  ))
+
+
+
+(define-map watchlist (tuple (user principal) (auction-id uint)) bool)
+
+(define-public (add-to-watchlist (auction-id uint))
+  (begin
+    (map-set watchlist {user: tx-sender, auction-id: auction-id} true)
+    (ok "Added to watchlist")
+  ))
+
+(define-public (remove-from-watchlist (auction-id uint))
+  (begin
+    (map-delete watchlist {user: tx-sender, auction-id: auction-id})
+    (ok "Removed from watchlist")
+  ))
+
+
+
+(define-map bid-increments uint uint)
+
+(define-public (set-bid-increment (price-range uint) (increment uint))
+  (begin
+    (asserts! (is-eq tx-sender (var-get auction-owner)) (err "Not authorized"))
+    (map-set bid-increments price-range increment)
+    (ok "Bid increment set")
+  ))
+
+
+
+(define-map group-bids uint {
+    members: (list 50 principal),
+    total-contribution: uint
+})
+
+(define-public (create-group-bid (group-id uint))
+  (begin
+    (map-set group-bids group-id {
+        members: (list tx-sender),
+        total-contribution: u0
+    })
+    (ok "Group bid created")
+  ))
+
+
+
+(define-map auction-history uint {
+    start-time: uint,
+    end-time: uint,
+    winner: principal,
+    final-price: uint
+})
+
+(define-public (record-auction-result (auction-id uint))
+  (begin
+    (asserts! (is-eq tx-sender (var-get auction-owner)) (err "Not authorized"))
+    (map-set auction-history auction-id {
+        start-time: block-height,
+        end-time: (var-get auction-end),
+        winner: (var-get highest-bidder),
+        final-price: (var-get highest-bid)
+    })
+    (ok "Auction recorded")
+  ))
