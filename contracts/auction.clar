@@ -285,3 +285,107 @@
     })
     (ok "Auction recorded")
   ))
+;; Add at the top with other data vars
+(define-map scheduled-auctions uint {
+    start-time: uint,
+    duration: uint,
+    item-name: (string-utf8 50),
+    starting-price: uint
+})
+(define-data-var schedule-count uint u0)
+
+(define-public (schedule-auction (start-time uint) (duration uint) (item-name (string-utf8 50)) (price uint))
+    (begin
+        (asserts! (> start-time block-height) (err "Invalid start time"))
+        (map-set scheduled-auctions (var-get schedule-count) {
+            start-time: start-time,
+            duration: duration,
+            item-name: item-name,
+            starting-price: price
+        })
+        (var-set schedule-count (+ (var-get schedule-count) u1))
+        (ok "Auction scheduled")
+    ))
+(define-map bidder-deposits principal uint)
+
+(define-public (deposit-funds)
+    (begin
+        (map-set bidder-deposits tx-sender (+ (default-to u0 (map-get? bidder-deposits tx-sender)) (stx-get-balance tx-sender)))
+        (ok "Funds deposited")
+    ))
+
+(define-public (check-deposit)
+    (ok (default-to u0 (map-get? bidder-deposits tx-sender))))
+(define-map batch-auctions uint {
+    items: (list 50 (string-utf8 50)),
+    prices: (list 50 uint),
+    sold: (list 50 bool)
+})
+
+(define-public (create-batch-auction (items (list 50 (string-utf8 50))) (prices (list 50 uint)))
+    (begin
+        (asserts! (is-eq tx-sender (var-get auction-owner)) (err "Not authorized"))
+        (map-set batch-auctions (var-get auction-end) {
+            items: items,
+            prices: prices,
+            sold: (list false false false false false)
+        })
+        (ok "Batch auction created")
+    ))
+(define-map auction-analytics uint {
+    total-bids: uint,
+    unique-bidders: uint,
+    avg-bid: uint,
+    highest-bid: uint
+})
+
+(define-public (update-analytics (auction-id uint))
+    (begin
+        (map-set auction-analytics auction-id {
+            total-bids: (var-get bid-count),
+            unique-bidders: u1,
+            avg-bid: (var-get highest-bid),
+            highest-bid: (var-get highest-bid)
+        })
+        (ok "Analytics updated")
+    ))
+(define-map referrals principal {
+    referrer: principal,
+    rewards: uint
+})
+
+(define-public (add-referral (referrer principal))
+    (begin
+        (asserts! (not (is-eq tx-sender referrer)) (err "Cannot refer self"))
+        (map-set referrals tx-sender {
+            referrer: referrer,
+            rewards: u0
+        })
+        (ok "Referral added")
+    ))
+(define-map notifications principal (list 50 (string-utf8 100)))
+(define-map notification-count principal uint)
+
+(define-public (add-notification (user principal) (message (string-utf8 100)))
+    (let ((current-notifications (default-to (list) (map-get? notifications user))))
+        (begin
+            (map-set notifications user 
+                (unwrap! (as-max-len? (append current-notifications message) u50) (err "List full")))
+            (ok "Notification sent")
+        )))
+(define-map insured-auctions uint {
+    coverage-amount: uint,
+    premium-paid: uint,
+    is-active: bool
+})
+
+(define-public (insure-auction (auction-id uint) (coverage uint))
+    (begin
+        (asserts! (is-eq tx-sender (var-get auction-owner)) (err "Not authorized"))
+        (map-set insured-auctions auction-id {
+            coverage-amount: coverage,
+            premium-paid: (/ coverage u20),
+            is-active: true
+        })
+        (ok "Auction insured")
+    ))
