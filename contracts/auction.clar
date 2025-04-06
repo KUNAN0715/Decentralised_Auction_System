@@ -389,3 +389,172 @@
         })
         (ok "Auction insured")
     ))
+
+
+
+(define-data-var fee-percentage uint u5)
+(define-data-var fee-collector principal 'ST1PQHQKV0RJXZFY1DGX8MNSNYVE3VGZJSRTPGZGM)
+(define-data-var total-fees-collected uint u0)
+
+(define-public (set-fee-percentage (new-percentage uint))
+  (begin
+    (asserts! (is-eq tx-sender (var-get auction-owner)) (err "Not authorized"))
+    (asserts! (<= new-percentage u20) (err "Fee too high"))
+    (var-set fee-percentage new-percentage)
+    (ok "Fee percentage updated")
+  ))
+
+(define-public (set-fee-collector (new-collector principal))
+  (begin
+    (asserts! (is-eq tx-sender (var-get auction-owner)) (err "Not authorized"))
+    (var-set fee-collector new-collector)
+    (ok "Fee collector updated")
+  ))
+
+(define-public (collect-auction-fee)
+  (begin
+    (asserts! (is-eq tx-sender (var-get fee-collector)) (err "Not authorized"))
+    (var-set total-fees-collected u0)
+    (ok "Fees collected")
+  ))
+
+
+
+(define-data-var auction-status (string-ascii 8) "inactive")
+
+(define-public (cancel-auction)
+  (begin
+    (asserts! (is-eq tx-sender (var-get auction-owner)) (err "Not authorized"))
+    (asserts! (is-eq (var-get auction-status) "active") (err "No active auction"))
+    (var-set auction-status "cancelle")
+    (var-set auction-end u0)
+    (var-set highest-bid u0)
+    (var-set highest-bidder 'ST1PQHQKV0RJXZFY1DGX8MNSNYVE3VGZJSRTPGZGM)
+    (ok "Auction cancelled")
+  ))
+
+
+
+(define-map auction-metadata uint {
+  title: (string-utf8 100),
+  description: (string-utf8 500),
+  image-url: (string-utf8 200),
+  category: uint
+})
+
+(define-public (set-auction-metadata (auction-id uint) (title (string-utf8 100)) (description (string-utf8 500)) (image-url (string-utf8 200)) (category uint))
+  (begin
+    (asserts! (is-eq tx-sender (var-get auction-owner)) (err "Not authorized"))
+    (map-set auction-metadata auction-id {
+      title: title,
+      description: description,
+      image-url: image-url,
+      category: category
+    })
+    (ok "Metadata set")
+  ))
+
+
+(define-map verified-bidders principal bool)
+(define-data-var verification-threshold uint u10000)
+
+(define-public (verify-bidder (bidder principal))
+  (begin
+    (asserts! (is-eq tx-sender (var-get auction-owner)) (err "Not authorized"))
+    (map-set verified-bidders bidder true)
+    (ok "Bidder verified")
+  ))
+
+(define-public (place-verified-bid (amount uint))
+  (begin
+    (asserts! (> (var-get auction-end) u0) (err "Auction has ended"))
+    (asserts! (> amount (var-get highest-bid)) (err "Bid too low"))
+    (asserts! (or 
+               (< amount (var-get verification-threshold)) 
+               (default-to false (map-get? verified-bidders tx-sender)))
+             (err "Verification required for large bids"))
+    (var-set highest-bid amount)
+    (var-set highest-bidder tx-sender)
+    (ok "Verified bid placed")
+  ))
+
+
+(define-map escrow-balances principal uint)
+(define-data-var escrow-required bool true)
+
+(define-public (toggle-escrow-requirement)
+  (begin
+    (asserts! (is-eq tx-sender (var-get auction-owner)) (err "Not authorized"))
+    (var-set escrow-required (not (var-get escrow-required)))
+    (ok "Escrow requirement updated")
+  ))
+
+(define-public (deposit-to-escrow (amount uint))
+  (begin
+    (map-set escrow-balances tx-sender (+ (default-to u0 (map-get? escrow-balances tx-sender)) amount))
+    (ok "Funds added to escrow")
+  ))
+
+(define-public (place-escrow-bid (amount uint))
+  (begin
+    (asserts! (> (var-get auction-end) u0) (err "Auction has ended"))
+    (asserts! (> amount (var-get highest-bid)) (err "Bid too low"))
+    (asserts! (>= (default-to u0 (map-get? escrow-balances tx-sender)) amount) 
+              (err "Insufficient escrow balance"))
+    (var-set highest-bid amount)
+    (var-set highest-bidder tx-sender)
+    (ok "Escrow bid placed")
+  ))
+
+(define-public (withdraw-from-escrow (amount uint))
+  (let ((current-balance (default-to u0 (map-get? escrow-balances tx-sender))))
+    (begin
+      (asserts! (>= current-balance amount) (err "Insufficient balance"))
+      (map-set escrow-balances tx-sender (- current-balance amount))
+      (ok "Funds withdrawn from escrow")
+    )
+  ))
+
+
+
+
+(define-map auction-tiers uint {
+  name: (string-utf8 50),
+  min-bid: uint,
+  max-bid: uint,
+  fee-percentage: uint,
+  extension-enabled: bool
+})
+(define-data-var tier-count uint u0)
+
+(define-public (create-auction-tier (name (string-utf8 50)) (min-bid uint) (max-bid uint) (fee uint) (extension-enabled bool))
+  (begin
+    (asserts! (is-eq tx-sender (var-get auction-owner)) (err "Not authorized"))
+    (asserts! (< min-bid max-bid) (err "Invalid bid range"))
+    (map-set auction-tiers (var-get tier-count) {
+      name: name,
+      min-bid: min-bid,
+      max-bid: max-bid,
+      fee-percentage: fee,
+      extension-enabled: extension-enabled
+    })
+    (var-set tier-count (+ (var-get tier-count) u1))
+    (ok "Auction tier created")
+  ))
+
+(define-read-only (get-tier-for-bid (bid-amount uint))
+  (let ((tier-id u0)
+        (found-tier {
+          name: "default", 
+          min-bid: u0, 
+          max-bid: u0, 
+          fee-percentage: u0, 
+          extension-enabled: false
+        }))
+    (asserts! (> bid-amount u0) (err "Invalid bid amount"))
+    (ok {tier-id: tier-id, tier-details: found-tier})
+  ))
+
+
+
+  
