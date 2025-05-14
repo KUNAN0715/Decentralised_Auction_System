@@ -557,3 +557,74 @@
 
 
 
+(define-map dutch-auctions uint {
+    start-price: uint,
+    min-price: uint,
+    decrement: uint,
+    interval: uint,
+    last-decrease: uint
+})
+
+(define-public (start-dutch-auction (auction-id uint) (start-price uint) (min-price uint) (decrement uint) (interval uint))
+    (begin
+        (asserts! (is-eq tx-sender (var-get auction-owner)) (err "Not authorized"))
+        (asserts! (> start-price min-price) (err "Invalid price range"))
+        (map-set dutch-auctions auction-id {
+            start-price: start-price,
+            min-price: min-price,
+            decrement: decrement,
+            interval: interval,
+            last-decrease: block-height
+        })
+        (ok "Dutch auction started")
+    ))
+
+(define-public (accept-dutch-price (auction-id uint))
+    (let ((auction (unwrap! (map-get? dutch-auctions auction-id) (err "Auction not found")))
+          (price-drops (/ (- block-height (get last-decrease auction)) (get interval auction)))
+          (current-price (- (get start-price auction) (* price-drops (get decrement auction)))))
+        (begin
+            (asserts! (>= current-price (get min-price auction)) (err "Auction ended"))
+            (var-set highest-bidder tx-sender)
+            (var-set highest-bid current-price)
+            (ok current-price)
+        )))
+
+
+(define-map multi-winner-auctions uint {
+    total-winners: uint,
+    winners-selected: uint,
+    min-bid: uint
+})
+
+(define-map auction-winners (tuple (auction-id uint) (position uint)) {
+    bidder: principal,
+    amount: uint
+})
+
+(define-public (create-multi-winner-auction (auction-id uint) (winners uint) (minimum-bid uint))
+    (begin
+        (asserts! (is-eq tx-sender (var-get auction-owner)) (err "Not authorized"))
+        (asserts! (> winners u0) (err "Invalid winner count"))
+        (map-set multi-winner-auctions auction-id {
+            total-winners: winners,
+            winners-selected: u0,
+            min-bid: minimum-bid
+        })
+        (ok "Multi-winner auction created")
+    ))
+
+(define-public (submit-winner-bid (auction-id uint) (amount uint))
+    (let ((auction (unwrap! (map-get? multi-winner-auctions auction-id) (err "Auction not found"))))
+        (begin
+            (asserts! (>= amount (get min-bid auction)) (err "Bid too low"))
+            (asserts! (< (get winners-selected auction) (get total-winners auction)) (err "All positions filled"))
+            (map-set auction-winners {auction-id: auction-id, position: (get winners-selected auction)} {
+                bidder: tx-sender,
+                amount: amount
+            })
+            (map-set multi-winner-auctions auction-id 
+                (merge auction {winners-selected: (+ (get winners-selected auction) u1)}))
+            (ok "Bid accepted")
+        )))
+
