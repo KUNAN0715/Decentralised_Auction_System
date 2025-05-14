@@ -153,3 +153,478 @@
 
 (define-public (check-whitelist (bidder principal))
   (ok (default-to false (map-get? whitelisted-bidders bidder))))
+
+
+
+;; Add at the top with other data vars
+(define-map categories uint (string-utf8 50))
+(define-data-var category-count uint u0)
+
+(define-public (create-category (name (string-utf8 50)))
+  (begin
+    (asserts! (is-eq tx-sender (var-get auction-owner)) (err "Not authorized"))
+    (map-set categories (var-get category-count) name)
+    (var-set category-count (+ (var-get category-count) u1))
+    (ok "Category created")
+  ))
+
+
+(define-map bidder-ratings principal {
+    total-ratings: uint,
+    rating-sum: uint
+})
+
+(define-public (rate-bidder (bidder principal) (rating uint))
+  (begin 
+    (asserts! (<= rating u5) (err "Rating must be 1-5"))
+    (let ((current-rating (default-to {total-ratings: u0, rating-sum: u0} 
+                          (map-get? bidder-ratings bidder))))
+      (map-set bidder-ratings bidder 
+        {total-ratings: (+ (get total-ratings current-rating) u1),
+         rating-sum: (+ (get rating-sum current-rating) rating)})
+      (ok "Rating submitted"))
+  ))
+
+
+
+(define-map auction-lots uint {
+    item-count: uint,
+    min-items: uint,
+    max-items: uint
+})
+
+(define-public (create-lot (lot-id uint) (count uint) (min uint) (max uint))
+  (begin
+    (asserts! (is-eq tx-sender (var-get auction-owner)) (err "Not authorized"))
+    (map-set auction-lots lot-id {
+        item-count: count,
+        min-items: min,
+        max-items: max
+    })
+    (ok "Lot created")
+  ))
+
+
+
+(define-map time-discounts uint {
+    hours-left: uint,
+    discount-percent: uint
+})
+
+(define-public (set-time-discount (hours uint) (discount uint))
+  (begin
+    (asserts! (is-eq tx-sender (var-get auction-owner)) (err "Not authorized"))
+    (asserts! (<= discount u50) (err "Max discount is 50%"))
+    (map-set time-discounts hours {
+        hours-left: hours,
+        discount-percent: discount
+    })
+    (ok "Discount set")
+  ))
+
+
+
+(define-map watchlist (tuple (user principal) (auction-id uint)) bool)
+
+(define-public (add-to-watchlist (auction-id uint))
+  (begin
+    (map-set watchlist {user: tx-sender, auction-id: auction-id} true)
+    (ok "Added to watchlist")
+  ))
+
+(define-public (remove-from-watchlist (auction-id uint))
+  (begin
+    (map-delete watchlist {user: tx-sender, auction-id: auction-id})
+    (ok "Removed from watchlist")
+  ))
+
+
+
+(define-map bid-increments uint uint)
+
+(define-public (set-bid-increment (price-range uint) (increment uint))
+  (begin
+    (asserts! (is-eq tx-sender (var-get auction-owner)) (err "Not authorized"))
+    (map-set bid-increments price-range increment)
+    (ok "Bid increment set")
+  ))
+
+
+
+(define-map group-bids uint {
+    members: (list 50 principal),
+    total-contribution: uint
+})
+
+(define-public (create-group-bid (group-id uint))
+  (begin
+    (map-set group-bids group-id {
+        members: (list tx-sender),
+        total-contribution: u0
+    })
+    (ok "Group bid created")
+  ))
+
+
+
+(define-map auction-history uint {
+    start-time: uint,
+    end-time: uint,
+    winner: principal,
+    final-price: uint
+})
+
+(define-public (record-auction-result (auction-id uint))
+  (begin
+    (asserts! (is-eq tx-sender (var-get auction-owner)) (err "Not authorized"))
+    (map-set auction-history auction-id {
+        start-time: block-height,
+        end-time: (var-get auction-end),
+        winner: (var-get highest-bidder),
+        final-price: (var-get highest-bid)
+    })
+    (ok "Auction recorded")
+  ))
+;; Add at the top with other data vars
+(define-map scheduled-auctions uint {
+    start-time: uint,
+    duration: uint,
+    item-name: (string-utf8 50),
+    starting-price: uint
+})
+(define-data-var schedule-count uint u0)
+
+(define-public (schedule-auction (start-time uint) (duration uint) (item-name (string-utf8 50)) (price uint))
+    (begin
+        (asserts! (> start-time block-height) (err "Invalid start time"))
+        (map-set scheduled-auctions (var-get schedule-count) {
+            start-time: start-time,
+            duration: duration,
+            item-name: item-name,
+            starting-price: price
+        })
+        (var-set schedule-count (+ (var-get schedule-count) u1))
+        (ok "Auction scheduled")
+    ))
+(define-map bidder-deposits principal uint)
+
+(define-public (deposit-funds)
+    (begin
+        (map-set bidder-deposits tx-sender (+ (default-to u0 (map-get? bidder-deposits tx-sender)) (stx-get-balance tx-sender)))
+        (ok "Funds deposited")
+    ))
+
+(define-public (check-deposit)
+    (ok (default-to u0 (map-get? bidder-deposits tx-sender))))
+(define-map batch-auctions uint {
+    items: (list 50 (string-utf8 50)),
+    prices: (list 50 uint),
+    sold: (list 50 bool)
+})
+
+(define-public (create-batch-auction (items (list 50 (string-utf8 50))) (prices (list 50 uint)))
+    (begin
+        (asserts! (is-eq tx-sender (var-get auction-owner)) (err "Not authorized"))
+        (map-set batch-auctions (var-get auction-end) {
+            items: items,
+            prices: prices,
+            sold: (list false false false false false)
+        })
+        (ok "Batch auction created")
+    ))
+(define-map auction-analytics uint {
+    total-bids: uint,
+    unique-bidders: uint,
+    avg-bid: uint,
+    highest-bid: uint
+})
+
+(define-public (update-analytics (auction-id uint))
+    (begin
+        (map-set auction-analytics auction-id {
+            total-bids: (var-get bid-count),
+            unique-bidders: u1,
+            avg-bid: (var-get highest-bid),
+            highest-bid: (var-get highest-bid)
+        })
+        (ok "Analytics updated")
+    ))
+(define-map referrals principal {
+    referrer: principal,
+    rewards: uint
+})
+
+(define-public (add-referral (referrer principal))
+    (begin
+        (asserts! (not (is-eq tx-sender referrer)) (err "Cannot refer self"))
+        (map-set referrals tx-sender {
+            referrer: referrer,
+            rewards: u0
+        })
+        (ok "Referral added")
+    ))
+(define-map notifications principal (list 50 (string-utf8 100)))
+(define-map notification-count principal uint)
+
+(define-public (add-notification (user principal) (message (string-utf8 100)))
+    (let ((current-notifications (default-to (list) (map-get? notifications user))))
+        (begin
+            (map-set notifications user 
+                (unwrap! (as-max-len? (append current-notifications message) u50) (err "List full")))
+            (ok "Notification sent")
+        )))
+(define-map insured-auctions uint {
+    coverage-amount: uint,
+    premium-paid: uint,
+    is-active: bool
+})
+
+(define-public (insure-auction (auction-id uint) (coverage uint))
+    (begin
+        (asserts! (is-eq tx-sender (var-get auction-owner)) (err "Not authorized"))
+        (map-set insured-auctions auction-id {
+            coverage-amount: coverage,
+            premium-paid: (/ coverage u20),
+            is-active: true
+        })
+        (ok "Auction insured")
+    ))
+
+
+
+(define-data-var fee-percentage uint u5)
+(define-data-var fee-collector principal 'ST1PQHQKV0RJXZFY1DGX8MNSNYVE3VGZJSRTPGZGM)
+(define-data-var total-fees-collected uint u0)
+
+(define-public (set-fee-percentage (new-percentage uint))
+  (begin
+    (asserts! (is-eq tx-sender (var-get auction-owner)) (err "Not authorized"))
+    (asserts! (<= new-percentage u20) (err "Fee too high"))
+    (var-set fee-percentage new-percentage)
+    (ok "Fee percentage updated")
+  ))
+
+(define-public (set-fee-collector (new-collector principal))
+  (begin
+    (asserts! (is-eq tx-sender (var-get auction-owner)) (err "Not authorized"))
+    (var-set fee-collector new-collector)
+    (ok "Fee collector updated")
+  ))
+
+(define-public (collect-auction-fee)
+  (begin
+    (asserts! (is-eq tx-sender (var-get fee-collector)) (err "Not authorized"))
+    (var-set total-fees-collected u0)
+    (ok "Fees collected")
+  ))
+
+
+
+(define-data-var auction-status (string-ascii 8) "inactive")
+
+(define-public (cancel-auction)
+  (begin
+    (asserts! (is-eq tx-sender (var-get auction-owner)) (err "Not authorized"))
+    (asserts! (is-eq (var-get auction-status) "active") (err "No active auction"))
+    (var-set auction-status "cancelle")
+    (var-set auction-end u0)
+    (var-set highest-bid u0)
+    (var-set highest-bidder 'ST1PQHQKV0RJXZFY1DGX8MNSNYVE3VGZJSRTPGZGM)
+    (ok "Auction cancelled")
+  ))
+
+
+
+(define-map auction-metadata uint {
+  title: (string-utf8 100),
+  description: (string-utf8 500),
+  image-url: (string-utf8 200),
+  category: uint
+})
+
+(define-public (set-auction-metadata (auction-id uint) (title (string-utf8 100)) (description (string-utf8 500)) (image-url (string-utf8 200)) (category uint))
+  (begin
+    (asserts! (is-eq tx-sender (var-get auction-owner)) (err "Not authorized"))
+    (map-set auction-metadata auction-id {
+      title: title,
+      description: description,
+      image-url: image-url,
+      category: category
+    })
+    (ok "Metadata set")
+  ))
+
+
+(define-map verified-bidders principal bool)
+(define-data-var verification-threshold uint u10000)
+
+(define-public (verify-bidder (bidder principal))
+  (begin
+    (asserts! (is-eq tx-sender (var-get auction-owner)) (err "Not authorized"))
+    (map-set verified-bidders bidder true)
+    (ok "Bidder verified")
+  ))
+
+(define-public (place-verified-bid (amount uint))
+  (begin
+    (asserts! (> (var-get auction-end) u0) (err "Auction has ended"))
+    (asserts! (> amount (var-get highest-bid)) (err "Bid too low"))
+    (asserts! (or 
+               (< amount (var-get verification-threshold)) 
+               (default-to false (map-get? verified-bidders tx-sender)))
+             (err "Verification required for large bids"))
+    (var-set highest-bid amount)
+    (var-set highest-bidder tx-sender)
+    (ok "Verified bid placed")
+  ))
+
+
+(define-map escrow-balances principal uint)
+(define-data-var escrow-required bool true)
+
+(define-public (toggle-escrow-requirement)
+  (begin
+    (asserts! (is-eq tx-sender (var-get auction-owner)) (err "Not authorized"))
+    (var-set escrow-required (not (var-get escrow-required)))
+    (ok "Escrow requirement updated")
+  ))
+
+(define-public (deposit-to-escrow (amount uint))
+  (begin
+    (map-set escrow-balances tx-sender (+ (default-to u0 (map-get? escrow-balances tx-sender)) amount))
+    (ok "Funds added to escrow")
+  ))
+
+(define-public (place-escrow-bid (amount uint))
+  (begin
+    (asserts! (> (var-get auction-end) u0) (err "Auction has ended"))
+    (asserts! (> amount (var-get highest-bid)) (err "Bid too low"))
+    (asserts! (>= (default-to u0 (map-get? escrow-balances tx-sender)) amount) 
+              (err "Insufficient escrow balance"))
+    (var-set highest-bid amount)
+    (var-set highest-bidder tx-sender)
+    (ok "Escrow bid placed")
+  ))
+
+(define-public (withdraw-from-escrow (amount uint))
+  (let ((current-balance (default-to u0 (map-get? escrow-balances tx-sender))))
+    (begin
+      (asserts! (>= current-balance amount) (err "Insufficient balance"))
+      (map-set escrow-balances tx-sender (- current-balance amount))
+      (ok "Funds withdrawn from escrow")
+    )
+  ))
+
+
+
+
+(define-map auction-tiers uint {
+  name: (string-utf8 50),
+  min-bid: uint,
+  max-bid: uint,
+  fee-percentage: uint,
+  extension-enabled: bool
+})
+(define-data-var tier-count uint u0)
+
+(define-public (create-auction-tier (name (string-utf8 50)) (min-bid uint) (max-bid uint) (fee uint) (extension-enabled bool))
+  (begin
+    (asserts! (is-eq tx-sender (var-get auction-owner)) (err "Not authorized"))
+    (asserts! (< min-bid max-bid) (err "Invalid bid range"))
+    (map-set auction-tiers (var-get tier-count) {
+      name: name,
+      min-bid: min-bid,
+      max-bid: max-bid,
+      fee-percentage: fee,
+      extension-enabled: extension-enabled
+    })
+    (var-set tier-count (+ (var-get tier-count) u1))
+    (ok "Auction tier created")
+  ))
+
+(define-read-only (get-tier-for-bid (bid-amount uint))
+  (let ((tier-id u0)
+        (found-tier {
+          name: "default", 
+          min-bid: u0, 
+          max-bid: u0, 
+          fee-percentage: u0, 
+          extension-enabled: false
+        }))
+    (asserts! (> bid-amount u0) (err "Invalid bid amount"))
+    (ok {tier-id: tier-id, tier-details: found-tier})
+  ))
+
+
+
+(define-map dutch-auctions uint {
+    start-price: uint,
+    min-price: uint,
+    decrement: uint,
+    interval: uint,
+    last-decrease: uint
+})
+
+(define-public (start-dutch-auction (auction-id uint) (start-price uint) (min-price uint) (decrement uint) (interval uint))
+    (begin
+        (asserts! (is-eq tx-sender (var-get auction-owner)) (err "Not authorized"))
+        (asserts! (> start-price min-price) (err "Invalid price range"))
+        (map-set dutch-auctions auction-id {
+            start-price: start-price,
+            min-price: min-price,
+            decrement: decrement,
+            interval: interval,
+            last-decrease: block-height
+        })
+        (ok "Dutch auction started")
+    ))
+
+(define-public (accept-dutch-price (auction-id uint))
+    (let ((auction (unwrap! (map-get? dutch-auctions auction-id) (err "Auction not found")))
+          (price-drops (/ (- block-height (get last-decrease auction)) (get interval auction)))
+          (current-price (- (get start-price auction) (* price-drops (get decrement auction)))))
+        (begin
+            (asserts! (>= current-price (get min-price auction)) (err "Auction ended"))
+            (var-set highest-bidder tx-sender)
+            (var-set highest-bid current-price)
+            (ok current-price)
+        )))
+
+
+(define-map multi-winner-auctions uint {
+    total-winners: uint,
+    winners-selected: uint,
+    min-bid: uint
+})
+
+(define-map auction-winners (tuple (auction-id uint) (position uint)) {
+    bidder: principal,
+    amount: uint
+})
+
+(define-public (create-multi-winner-auction (auction-id uint) (winners uint) (minimum-bid uint))
+    (begin
+        (asserts! (is-eq tx-sender (var-get auction-owner)) (err "Not authorized"))
+        (asserts! (> winners u0) (err "Invalid winner count"))
+        (map-set multi-winner-auctions auction-id {
+            total-winners: winners,
+            winners-selected: u0,
+            min-bid: minimum-bid
+        })
+        (ok "Multi-winner auction created")
+    ))
+
+(define-public (submit-winner-bid (auction-id uint) (amount uint))
+    (let ((auction (unwrap! (map-get? multi-winner-auctions auction-id) (err "Auction not found"))))
+        (begin
+            (asserts! (>= amount (get min-bid auction)) (err "Bid too low"))
+            (asserts! (< (get winners-selected auction) (get total-winners auction)) (err "All positions filled"))
+            (map-set auction-winners {auction-id: auction-id, position: (get winners-selected auction)} {
+                bidder: tx-sender,
+                amount: amount
+            })
+            (map-set multi-winner-auctions auction-id 
+                (merge auction {winners-selected: (+ (get winners-selected auction) u1)}))
+            (ok "Bid accepted")
+        )))
+
