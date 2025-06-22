@@ -628,3 +628,88 @@
             (ok "Bid accepted")
         )))
 
+(define-map proxy-bids principal {
+    max-amount: uint,
+    increment: uint,
+    is-active: bool,
+    total-spent: uint
+})
+
+(define-data-var min-proxy-increment uint u10)
+
+(define-public (set-proxy-bid (max-amount uint) (increment uint))
+    (begin
+        (asserts! (> max-amount (var-get highest-bid)) (err "Max amount too low"))
+        (asserts! (>= increment (var-get min-proxy-increment)) (err "Increment too small"))
+        (asserts! (> (var-get auction-end) block-height) (err "Auction ended"))
+        (map-set proxy-bids tx-sender {
+            max-amount: max-amount,
+            increment: increment,
+            is-active: true,
+            total-spent: u0
+        })
+        (ok "Proxy bid set")
+    ))
+
+(define-public (cancel-proxy-bid)
+    (begin
+        (asserts! (is-some (map-get? proxy-bids tx-sender)) (err "No proxy bid found"))
+        (map-delete proxy-bids tx-sender)
+        (ok "Proxy bid cancelled")
+    ))
+
+(define-public (execute-proxy-bid (bidder principal))
+    (let ((proxy (unwrap! (map-get? proxy-bids bidder) (err "No proxy bid")))
+          (current-high (var-get highest-bid))
+          (next-bid (+ current-high (get increment proxy))))
+        (begin
+            (asserts! (get is-active proxy) (err "Proxy inactive"))
+            (asserts! (<= next-bid (get max-amount proxy)) (err "Exceeds max amount"))
+            (asserts! (not (is-eq bidder (var-get highest-bidder))) (err "Already highest bidder"))
+            (asserts! (> (var-get auction-end) block-height) (err "Auction ended"))
+            (var-set highest-bid next-bid)
+            (var-set highest-bidder bidder)
+            (map-set proxy-bids bidder 
+                (merge proxy {total-spent: (+ (get total-spent proxy) next-bid)}))
+            (ok next-bid)
+        )))
+
+(define-public (trigger-proxy-system)
+    (let ((current-bidder (var-get highest-bidder)))
+        (begin
+            (asserts! (> (var-get auction-end) block-height) (err "Auction ended"))
+            (try! (execute-proxy-bid 'ST1PQHQKV0RJXZFY1DGX8MNSNYVE3VGZJSRTPGZGM))
+            (ok "Proxy system triggered")
+        )))
+
+(define-read-only (get-proxy-bid (bidder principal))
+    (map-get? proxy-bids bidder))
+
+(define-read-only (check-proxy-eligibility (bidder principal))
+    (let ((proxy (map-get? proxy-bids bidder)))
+        (match proxy
+            some-proxy (let ((current-high (var-get highest-bid))
+                           (next-bid (+ current-high (get increment some-proxy))))
+                        (and 
+                            (get is-active some-proxy)
+                            (<= next-bid (get max-amount some-proxy))
+                            (not (is-eq bidder (var-get highest-bidder)))))
+            false)))
+
+(define-public (update-proxy-increment (new-increment uint))
+    (let ((proxy (unwrap! (map-get? proxy-bids tx-sender) (err "No proxy bid found"))))
+        (begin
+            (asserts! (>= new-increment (var-get min-proxy-increment)) (err "Increment too small"))
+            (map-set proxy-bids tx-sender (merge proxy {increment: new-increment}))
+            (ok "Proxy increment updated")
+        )))
+
+(define-public (deactivate-proxy-on-limit)
+    (let ((proxy (unwrap! (map-get? proxy-bids tx-sender) (err "No proxy bid found")))
+          (current-high (var-get highest-bid))
+          (next-potential (+ current-high (get increment proxy))))
+        (begin
+            (asserts! (> next-potential (get max-amount proxy)) (err "Limit not reached"))
+            (map-set proxy-bids tx-sender (merge proxy {is-active: false}))
+            (ok "Proxy deactivated at limit")
+        )))
