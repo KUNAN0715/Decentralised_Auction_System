@@ -9,6 +9,16 @@ requirements = []
 path = 'contracts/auction.clar'
 clarity_version = 2
 epoch = 2.5
+
+[contracts.yield-farming]
+path = 'contracts/yield-farming.clar'
+clarity_version = 3
+epoch = 3.1
+
+[contracts.reputation-system]
+path = 'contracts/reputation-system.clar'
+clarity_version = 3
+epoch = 3.1
 [repl.analysis]
 passes = ['check_checker']
 
