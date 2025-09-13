@@ -55,3 +55,21 @@ plan:
             path: "contracts\\auction.clar"
             clarity-version: 2
       epoch: "2.5"
+    - id: 1
+      transactions:
+        - emulated-contract-publish:
+            contract-name: anti-sniping
+            emulated-sender: ST1PQHQKV0RJXZFY1DGX8MNSNYVE3VGZJSRTPGZGM
+            path: "contracts\\anti-sniping.clar"
+            clarity-version: 3
+        - emulated-contract-publish:
+            contract-name: reputation-system
+            emulated-sender: ST1PQHQKV0RJXZFY1DGX8MNSNYVE3VGZJSRTPGZGM
+            path: "contracts\\reputation-system.clar"
+            clarity-version: 3
+        - emulated-contract-publish:
+            contract-name: yield-farming
+            emulated-sender: ST1PQHQKV0RJXZFY1DGX8MNSNYVE3VGZJSRTPGZGM
+            path: "contracts\\yield-farming.clar"
+            clarity-version: 3
+      epoch: "3.1"
